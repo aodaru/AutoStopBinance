@@ -62,6 +62,8 @@ def positionInfo(tick):
             archivo.write(mensaje)
             archivo.close()
             time.sleep(2)
+            currentPosition = 0 
+            break
         else:
             break
     return currentPosition
@@ -91,12 +93,57 @@ while True:
             except:
                 print("VALOR INVALIDO, INGRESE UN NUMERO VALIDO")
     info = positionInfo(tick)
-    if float(info[0].get('positionAmt')) != 0:
-        print("positionAmt: " + str(info[0].get('positionAmt')) + " entryPrice: " + str(
-            info[0].get('entryPrice')) + " leverage: " + str(info[0].get('leverage')))
-        if entryPrice != float(info[0].get('entryPrice')) or positionAMT != float(info[0].get('positionAmt')):
-            entryPrice = float(info[0].get('entryPrice'))
-            positionAMT = float(info[0].get('positionAmt'))
+    if (info != 0):
+        if float(info[0].get('positionAmt')) != 0:
+            print("positionAmt: " + str(info[0].get('positionAmt')) + " entryPrice: " + str(
+                info[0].get('entryPrice')) + " leverage: " + str(info[0].get('leverage')))
+            if entryPrice != float(info[0].get('entryPrice')) or positionAMT != float(info[0].get('positionAmt')):
+                entryPrice = float(info[0].get('entryPrice'))
+                positionAMT = float(info[0].get('positionAmt'))
+                openOrders = client.futures_get_open_orders(symbol=tick)
+                if len(openOrders) > 0:
+                    orderID = 0
+                    for order in openOrders:
+                        if order['type'] == 'STOP_MARKET':
+                            orderID = order['orderId']
+                    if orderID != 0:
+                        client.futures_cancel_order(symbol=tick, orderId=orderID)
+                        print("ORDEN STOP LOSS CANCELADA")
+                side = 'BUY'
+                if positionAMT > 0:
+                    side = 'SELL'
+                    positionAMT2 = positionAMT
+                else:
+                    positionAMT2 = positionAMT * -1
+                porcentaje = (stopLoss * 100) / (entryPrice * positionAMT2)
+                print(porcentaje)
+                stopPrice = getStopPrice(entryPrice, porcentaje, tick, side)
+                print("STOP LOSS: " + str(stopPrice))
+                if stopPrice < 0:
+                    print('Stop Loss menor que 0')
+                else:
+                    while True:
+                        try:
+                            client.futures_create_order(
+                                symbol=tick,
+                                type='STOP_MARKET',
+                                side=side,
+                                stopPrice=stopPrice,
+                                closePosition=True
+                            )
+                        except Exception as e:
+                            print(e)
+                            archivo = open("log.txt", "a")
+                            mensaje = time.strftime('%d-%m-%Y %H:%M:%S',
+                                                    time.localtime()) + ' ERROR: ' + str(
+                                e) + "\n"
+                            archivo.write(mensaje)
+                            archivo.close()
+                            time.sleep(2)
+                        else:
+                            break
+        else:
+            print("NO HAY POSICIONES ABIERTAS EN: " + tick)
             openOrders = client.futures_get_open_orders(symbol=tick)
             if len(openOrders) > 0:
                 orderID = 0
@@ -106,50 +153,12 @@ while True:
                 if orderID != 0:
                     client.futures_cancel_order(symbol=tick, orderId=orderID)
                     print("ORDEN STOP LOSS CANCELADA")
-            side = 'BUY'
-            if positionAMT > 0:
-                side = 'SELL'
-                positionAMT2 = positionAMT
-            else:
-                positionAMT2 = positionAMT * -1
-            porcentaje = (stopLoss * 100) / (entryPrice * positionAMT2)
-            print(porcentaje)
-            stopPrice = getStopPrice(entryPrice, porcentaje, tick, side)
-            print("STOP LOSS: " + str(stopPrice))
-            if stopPrice < 0:
-                print('Stop Loss menor que 0')
-            else:
-                while True:
-                    try:
-                        client.futures_create_order(
-                            symbol=tick,
-                            type='STOP_MARKET',
-                            side=side,
-                            stopPrice=stopPrice,
-                            closePosition=True
-                        )
-                    except Exception as e:
-                        print(e)
-                        archivo = open("log.txt", "a")
-                        mensaje = time.strftime('%d-%m-%Y %H:%M:%S',
-                                                time.localtime()) + ' ERROR: ' + str(
-                            e) + "\n"
-                        archivo.write(mensaje)
-                        archivo.close()
-                        time.sleep(2)
-                    else:
-                        break
+            tick = ""
+            stopLoss = 0
+            entryPrice = 0.0
+            positionAMT = 0.0
     else:
-        print("NO HAY POSICIONES ABIERTAS EN: " + tick)
-        openOrders = client.futures_get_open_orders(symbol=tick)
-        if len(openOrders) > 0:
-            orderID = 0
-            for order in openOrders:
-                if order['type'] == 'STOP_MARKET':
-                    orderID = order['orderId']
-            if orderID != 0:
-                client.futures_cancel_order(symbol=tick, orderId=orderID)
-                print("ORDEN STOP LOSS CANCELADA")
+        print("EL PAR INTRODUCIDO NO EXISTE: " + tick)
         tick = ""
         stopLoss = 0
         entryPrice = 0.0
